@@ -1,0 +1,86 @@
+---
+title: "Pulled Fly Ball Comparison"
+output: pdf_document
+date: "2025-07-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(ggplot2)
+library(lubridate)
+library(tibble)
+```
+
+```{r}
+woba <- read.csv("wobastats.csv")
+woba <- woba %>%
+  group_by(last_name..first_name, player_id) %>%
+  summarise(
+    total_pa = sum(pa, na.rm = TRUE),
+    total_wobacon = round(sum(wobacon * pa, na.rm = TRUE) / sum(pa, na.rm = TRUE), 3),
+    total_xwobacon = round(sum(xwobacon * pa, na.rm = TRUE) / sum(pa, na.rm = TRUE), 3),
+    .groups = "drop"
+  )
+colnames(woba) <- c("name", "id", "total_pa", "total_wobacon", "total_xwobacon")
+woba$wobacon_difference <- woba$total_wobacon - woba$total_xwobacon
+head(woba, 5)
+```
+
+```{r}
+battedball <- read.csv("batted-ball.csv")
+keeps <- c("id", "name", "bbe", "pull_rate", "straight_rate", "oppo_rate", "pull_gb_rate", "straight_gb_rate",
+           "oppo_gb_rate", "pull_air_rate", "straight_air_rate", "oppo_air_rate")
+battedball <- battedball[keeps] 
+battedball <- battedball %>% mutate_if(is.numeric, round, digits=3)
+head(battedball, 5)
+```
+```{r}
+data <- right_join(woba, battedball, by = "id")
+keeps2 <- c("name.x", "id", "total_pa", "total_wobacon", "total_xwobacon",
+            "wobacon_difference", "bbe", "pull_rate", "straight_rate", "oppo_rate", 
+            "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate", "pull_air_rate",
+            "straight_air_rate", "oppo_air_rate")
+data <- data[keeps2]
+colnames(data) <- c("name", "id", "pa", "wobacon", "xwobacon",
+            "difference", "batted_balls", "pull%", "straight%", "oppo%", 
+            "pull_gb%", "straight_gb%", "oppo_gb%", "pull_air%",
+            "straight_air%", "oppo_air%")
+data <- data %>% mutate(
+  wobacon_class = factor(case_when(
+    ntile(wobacon, 3) == 1 ~ "Low",
+    ntile(wobacon, 3) == 2 ~ "Medium",
+    ntile(wobacon, 3) == 3 ~ "High"), levels = c("Low", "Medium", "High")))
+```
+
+```{r}
+ggplot(data, aes(x = difference, y = `pull_air%`)) +
+  geom_point(aes(color = wobacon_class)) +
+  labs(title = "Difference between wOBAcon/xwOBAcon versus Pulled 'Airballs'",
+       x = "xwOBAcon - wOBAcon",
+       y = "Pull-Air%") + scale_colour_brewer(palette = "Set1") + geom_smooth(method = "lm", se = FALSE)
+```
+
+```{r}
+ggplot(data, aes(x = difference, y = `pull%`)) +
+  geom_point(aes(color = wobacon_class)) +
+  labs(title = "Difference between wOBAcon/xwOBAcon versus Pulled Balls",
+       x = "xwOBAcon - wOBAcon",
+       y = "Pull%") + scale_colour_brewer(palette = "Set1") + geom_smooth(method = "lm", se = FALSE)
+```
+```{r}
+pulledair <- lm(difference ~ `pull_air%`, data)
+summary(pulledair)
+```
+
+```{r}
+pulledall <- lm(difference ~ `pull%`, data)
+summary(pulledall)
+```
+
+
+
